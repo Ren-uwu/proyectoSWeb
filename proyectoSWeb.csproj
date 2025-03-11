@@ -8,8 +8,6 @@
     <NoWarn>1591</NoWarn> <!-- Evita advertencias por métodos sin comentarios -->
   </PropertyGroup>
 
-  </PropertyGroup>
-
   <ItemGroup>
     <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.8" />
