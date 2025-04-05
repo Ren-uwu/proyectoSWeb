@@ -1,3 +1,7 @@
+create database bd_indicadores
+go
+use bd_indicadores
+go
 CREATE TABLE actor (
   id varchar(50) NOT NULL PRIMARY KEY,
   nombre varchar(200) NOT NULL,
@@ -846,4 +850,378 @@ ALTER TABLE variablesporindicador
   ADD CONSTRAINT cons_fkidindicador3 FOREIGN KEY (fkidindicador) REFERENCES indicador (id) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE variablesporindicador
   ADD CONSTRAINT cons_fkidvariable FOREIGN KEY (fkidvariable) REFERENCES variable (id) ON DELETE NO ACTION ON UPDATE NO ACTION;
+go
 
+CREATE PROCEDURE insertar_usuario_y_roles
+    @email VARCHAR(100),
+    @contrasena VARCHAR(100),
+    @roles NVARCHAR(MAX) -- JSON: [{"fkidrol": 1}, {"fkidrol": 2}]
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        BEGIN TRANSACTION;
+        
+        -- Insertar el usuario
+        INSERT INTO usuario (email, contrasena)
+        VALUES (@email, @contrasena);
+        
+        -- Insertar roles usando OPENJSON
+        INSERT INTO rol_usuario (fkemail, fkidrol)
+        SELECT @email, fkidrol
+        FROM OPENJSON(@roles)
+        WITH (
+            fkidrol INT '$.fkidrol'
+        );
+        
+        COMMIT TRANSACTION;
+        
+    END TRY
+    BEGIN CATCH
+        ROLLBACK TRANSACTION;
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        
+        -- En caso de error, devolver información sobre el error
+        SELECT 
+            '' AS Email,
+            @ErrorMessage AS Mensaje,
+            GETDATE() AS FechaError,
+            ERROR_NUMBER() AS ErrorNumero,
+            ERROR_STATE() AS ErrorEstado,
+            ERROR_SEVERITY() AS ErrorSeveridad,
+            ERROR_LINE() AS ErrorLinea;
+            
+        RAISERROR('Error al insertar usuario: %s', 16, 1, @ErrorMessage);
+    END CATCH
+END;
+GO
+
+CREATE PROCEDURE editar_usuario_y_roles
+    @email VARCHAR(100),
+    @contrasena VARCHAR(100),
+    @roles NVARCHAR(MAX) -- JSON: [{"fkidrol": 1}, {"fkidrol": 2}]
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        BEGIN TRANSACTION;
+        
+        UPDATE usuario
+        SET contrasena = @contrasena
+        WHERE email = @email;
+
+       -- Reemplazar roles (elimina los actuales y agrega los nuevos)
+       DELETE FROM rol_usuario WHERE fkemail = @email;;
+        
+        INSERT INTO rol_usuario (fkemail, fkidrol)
+        SELECT @email, fkidrol
+        FROM OPENJSON(@roles)
+        WITH (
+            fkidrol INT '$.fkidrol'
+        );
+        
+        COMMIT TRANSACTION;
+        
+    END TRY
+    BEGIN CATCH
+        ROLLBACK TRANSACTION;
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        
+        -- En caso de error, devolver información sobre el error
+        SELECT 
+            '' AS Email,
+            @ErrorMessage AS Mensaje,
+            GETDATE() AS FechaError,
+            ERROR_NUMBER() AS ErrorNumero,
+            ERROR_STATE() AS ErrorEstado,
+            ERROR_SEVERITY() AS ErrorSeveridad,
+            ERROR_LINE() AS ErrorLinea;
+            
+        RAISERROR('Error al insertar usuario: %s', 16, 1, @ErrorMessage);
+    END CATCH
+END;
+GO
+
+CREATE PROCEDURE elimiar_usuario_y_roles
+    @email VARCHAR(100)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        BEGIN TRANSACTION;
+        
+		-- Eliminar roles
+		DELETE FROM rol_usuario WHERE fkemail = @email;
+
+        -- Eliminar usuario
+		DELETE FROM usuario WHERE email = @email;
+        
+        COMMIT TRANSACTION;
+        
+    END TRY
+    BEGIN CATCH
+        ROLLBACK TRANSACTION;
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+        
+        -- En caso de error, devolver información sobre el error
+        SELECT 
+            '' AS Email,
+            @ErrorMessage AS Mensaje,
+            GETDATE() AS FechaError,
+            ERROR_NUMBER() AS ErrorNumero,
+            ERROR_STATE() AS ErrorEstado,
+            ERROR_SEVERITY() AS ErrorSeveridad,
+            ERROR_LINE() AS ErrorLinea;
+            
+        RAISERROR('Error al eliminar usuario: %s', 16, 1, @ErrorMessage);
+    END CATCH
+END;
+GO
+
+
+CREATE PROCEDURE insertar_indicador_tablas
+@codigoIndicador VARCHAR(50),
+@nombreIndicador VARCHAR(100),
+@objetivoIndicador VARCHAR(4000),
+@alcanceIndicador VARCHAR(1000),
+@formulaIndicador VARCHAR(1000),
+@fkidtipoindicador INT,
+@fkidunidadmedicion INT,
+@metaIndicador VARCHAR(1000),
+@fkidsentido INT,
+@fkidfrecuencia INT,
+@fkidarticulo VARCHAR(20),
+@fkidliteral VARCHAR(20),
+@fkidnumeral VARCHAR(20),
+@fkidparagrafo VARCHAR(20),
+    @represenvisualporindicador NVARCHAR(MAX),
+@responsablesporindicador NVARCHAR(MAX),
+@fuentesporindicador NVARCHAR(MAX),
+@variablesporindicador NVARCHAR(MAX),
+@resultadoporindicador NVARCHAR(MAX)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        BEGIN TRANSACTION;
+        -- Insertar el indicador
+        INSERT INTO indicador(codigo, nombre, objetivo, alcance, formula, fkidtipoindicador, fkidunidadmedicion,
+meta, fkidsentido, fkidfrecuencia, fkidarticulo, fkidliteral, fkidnumeral, fkidparagrafo)
+VALUES (@codigoIndicador, @nombreIndicador, @objetivoIndicador, @alcanceIndicador,
+@formulaIndicador, @fkidtipoindicador, @fkidunidadmedicion, @metaIndicador, @fkidsentido,
+@fkidfrecuencia, @fkidarticulo, @fkidliteral, @fkidnumeral, @fkidparagrafo);
+DECLARE @fkidindicadores INT = SCOPE_IDENTITY();
+DECLARE @fechacalculo DATETIME = GETDATE();
+--- insert para la tabla resultado indicador ---
+INSERT INTO resultadoindicador (resultado, fechacalculo, fkidindicador)
+SELECT resultado, @fechacalculo, @fkidindicadores
+FROM OPENJSON(@resultadoporindicador)
+WITH (
+resultado FLOAT '$.resultado'
+);
+--- insert para la tabla represenvisualporindicador ---
+INSERT INTO represenvisualporindicador (fkidindicador, fkidrepresenvisual)
+SELECT @fkidindicadores, fkidrepresenvisual
+FROM OPENJSON(@represenvisualporindicador)
+WITH (
+fkidrepresenvisual INT '$.fkidrepresenvisual'
+);
+--- insert para la tabla responsables por indicador ---
+INSERT INTO responsablesporindicador (fkidresponsable, fkidindicador)
+SELECT fkidresponsable, @fkidindicadores
+FROM OPENJSON(@responsablesporindicador)
+WITH (
+fkidresponsable VARCHAR(50) '$.fkidresponsable'
+);
+--- insert para la tabla fuentes por indicador ---
+INSERT INTO fuentesporindicador(fkidfuente, fkidindicador)
+SELECT fkidfuente, @fkidindicadores
+FROM OPENJSON(@fuentesporindicador)
+WITH (
+fkidfuente INT '$.fkidfuente'
+);
+--- insert para la tabla variables por indicador ---
+DECLARE @fechadato DATETIME = GETDATE();
+INSERT INTO variablesporindicador(fkidvariable, fkidindicador, dato, fkemailusuario, fechadato)
+SELECT fkidvariable, @fkidindicadores, dato, fkemailusuario, @fechadato
+FROM OPENJSON(@variablesporindicador)
+WITH (
+fkidvariable INT '$.fkidvariable',
+dato FLOAT '$.dato',
+fkemailusuario VARCHAR(100) '$.fkemailusuario'
+);
+        COMMIT TRANSACTION;
+        SELECT  
+            'indicador creado exitosamente' AS Mensaje,
+            GETDATE() AS FechaCreacion
+    END TRY
+    BEGIN CATCH
+        ROLLBACK TRANSACTION;
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+       
+        -- En caso de error, devolver información sobre el error
+        SELECT
+            @ErrorMessage AS Mensaje,
+            GETDATE() AS FechaError,
+            ERROR_NUMBER() AS ErrorNumero,
+            ERROR_STATE() AS ErrorEstado,
+            ERROR_SEVERITY() AS ErrorSeveridad,
+            ERROR_LINE() AS ErrorLinea;
+           
+        RAISERROR('Error al insertar indicador: %s', 16, 1, @ErrorMessage);
+    END CATCH
+END;
+GO
+
+CREATE PROCEDURE actualizar_indicador_tablas
+@fkidindicadores INT,
+@codigoIndicador VARCHAR(50),
+@nombreIndicador VARCHAR(100),
+@objetivoIndicador VARCHAR(4000),
+@alcanceIndicador VARCHAR(1000),
+@formulaIndicador VARCHAR(1000),
+@fkidtipoindicador INT,
+@fkidunidadmedicion INT,
+@metaIndicador VARCHAR(1000),
+@fkidsentido INT,
+@fkidfrecuencia INT,
+@fkidarticulo VARCHAR(20),
+@fkidliteral VARCHAR(20),
+@fkidnumeral VARCHAR(20),
+@fkidparagrafo VARCHAR(20),
+    @represenvisualporindicador NVARCHAR(MAX),
+@responsablesporindicador NVARCHAR(MAX),
+@fuentesporindicador NVARCHAR(MAX),
+@variablesporindicador NVARCHAR(MAX),
+@resultadoporindicador NVARCHAR(MAX)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        BEGIN TRANSACTION;
+        -- Insertar el indicador
+        UPDATE indicador
+            SET nombre = @nombreIndicador,
+                objetivo = @objetivoIndicador,
+                alcance = @alcanceIndicador,
+                formula = @formulaIndicador,
+                fkidtipoindicador = @fkidtipoindicador,
+                fkidunidadmedicion = @fkidunidadmedicion,
+                meta = @metaIndicador,
+                fkidsentido = @fkidsentido,
+                fkidfrecuencia = @fkidfrecuencia,
+                fkidarticulo = @fkidarticulo,
+                fkidliteral = @fkidliteral,
+                fkidnumeral = @fkidnumeral,
+                fkidparagrafo = @fkidparagrafo
+            WHERE id = @fkidindicadores;
+-- Eliminar registros relacionados para volver a insertar
+            DELETE FROM resultadoindicador WHERE fkidindicador = @fkidindicadores;
+            DELETE FROM represenvisualporindicador WHERE fkidindicador = @fkidindicadores;
+            DELETE FROM responsablesporindicador WHERE fkidindicador = @fkidindicadores;
+            DELETE FROM fuentesporindicador WHERE fkidindicador = @fkidindicadores;
+            DELETE FROM variablesporindicador WHERE fkidindicador = @fkidindicadores;
+DECLARE @fechacalculo DATETIME = GETDATE();
+--- insert para la tabla resultado indicador ---
+INSERT INTO resultadoindicador (resultado, fechacalculo, fkidindicador)
+SELECT resultado, @fechacalculo, @fkidindicadores
+FROM OPENJSON(@resultadoporindicador)
+WITH (
+resultado FLOAT '$.resultado'
+);
+--- insert para la tabla represenvisualporindicador ---
+INSERT INTO represenvisualporindicador (fkidindicador, fkidrepresenvisual)
+SELECT @fkidindicadores, fkidrepresenvisual
+FROM OPENJSON(@represenvisualporindicador)
+WITH (
+fkidrepresenvisual INT '$.fkidrepresenvisual'
+);
+--- insert para la tabla responsables por indicador ---
+INSERT INTO responsablesporindicador (fkidresponsable, fkidindicador)
+SELECT fkidresponsable, @fkidindicadores
+FROM OPENJSON(@responsablesporindicador)
+WITH (
+fkidresponsable VARCHAR(50) '$.fkidresponsable'
+);
+--- insert para la tabla fuentes por indicador ---
+INSERT INTO fuentesporindicador(fkidfuente, fkidindicador)
+SELECT fkidfuente, @fkidindicadores
+FROM OPENJSON(@fuentesporindicador)
+WITH (
+fkidfuente INT '$.fkidfuente'
+);
+--- insert para la tabla variables por indicador ---
+DECLARE @fechadato DATETIME = GETDATE();
+INSERT INTO variablesporindicador(fkidvariable, fkidindicador, dato, fkemailusuario, fechadato)
+SELECT fkidvariable, @fkidindicadores, dato, fkemailusuario, @fechadato
+FROM OPENJSON(@variablesporindicador)
+WITH (
+fkidvariable INT '$.fkidvariable',
+dato FLOAT '$.dato',
+fkemailusuario VARCHAR(100) '$.fkemailusuario'
+);
+        COMMIT TRANSACTION;
+        SELECT  
+            'indicador creado exitosamente' AS Mensaje,
+            GETDATE() AS FechaCreacion
+    END TRY
+    BEGIN CATCH
+        ROLLBACK TRANSACTION;
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+       
+        -- En caso de error, devolver información sobre el error
+        SELECT
+            @ErrorMessage AS Mensaje,
+            GETDATE() AS FechaError,
+            ERROR_NUMBER() AS ErrorNumero,
+            ERROR_STATE() AS ErrorEstado,
+            ERROR_SEVERITY() AS ErrorSeveridad,
+            ERROR_LINE() AS ErrorLinea;
+           
+        RAISERROR('Error al insertar indicador: %s', 16, 1, @ErrorMessage);
+    END CATCH
+END;
+GO
+
+CREATE PROCEDURE eliminar_indicador_tablas
+    @fkidindicadores INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        BEGIN TRANSACTION;
+
+            -- Eliminar primero las relaciones 
+            DELETE FROM resultadoindicador WHERE fkidindicador = @fkidindicadores;
+            DELETE FROM represenvisualporindicador WHERE fkidindicador = @fkidindicadores;
+            DELETE FROM responsablesporindicador WHERE fkidindicador = @fkidindicadores;
+            DELETE FROM fuentesporindicador WHERE fkidindicador = @fkidindicadores;
+            DELETE FROM variablesporindicador WHERE fkidindicador = @fkidindicadores;
+
+            -- Luego eliminar el indicador principal
+            DELETE FROM indicador WHERE id = @fkidindicadores;
+
+        COMMIT TRANSACTION;
+
+        SELECT  
+            'Indicador eliminado exitosamente' AS Mensaje,
+            GETDATE() AS FechaEliminacion;
+
+    END TRY
+    BEGIN CATCH
+        ROLLBACK TRANSACTION;
+
+        DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
+
+        SELECT
+            @ErrorMessage AS Mensaje,
+            GETDATE() AS FechaError,
+            ERROR_NUMBER() AS ErrorNumero,
+            ERROR_STATE() AS ErrorEstado,
+            ERROR_SEVERITY() AS ErrorSeveridad,
+            ERROR_LINE() AS ErrorLinea;
+
+        RAISERROR('Error al eliminar indicador: %s', 16, 1, @ErrorMessage);
+    END CATCH
+END;
+GO
