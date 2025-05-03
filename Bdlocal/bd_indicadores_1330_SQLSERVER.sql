@@ -1012,7 +1012,7 @@ BEGIN
 		@fkidfrecuencia, @fkidarticulo, @fkidliteral, @fkidnumeral, @fkidparagrafo);
 		DECLARE @fkidindicadores INT = SCOPE_IDENTITY();
 		DECLARE @fechacalculo DATETIME = GETDATE();
-IF	@resultadoporindicador = null or @resultadoporindicador = 0
+IF @resultadoporindicador IS NULL OR @resultadoporindicador = 0
 BEGIN
     INSERT INTO resultadoindicador (resultado, fechacalculo, fkidindicador)
     SELECT @resultadoporindicador, @fechacalculo, @fkidindicadores
@@ -1155,7 +1155,7 @@ BEGIN
             DELETE FROM variablesporindicador WHERE fkidindicador = @fkidindicadores;
 DECLARE @fechacalculo DATETIME = GETDATE();
 --- insert para la tabla resultado indicador ---
-IF	@resultadoporindicador = null or @resultadoporindicador = 0
+IF @resultadoporindicador IS NULL OR @resultadoporindicador = 0
 BEGIN
     INSERT INTO resultadoindicador (resultado, fechacalculo, fkidindicador)
     SELECT @resultadoporindicador, @fechacalculo, @fkidindicadores
@@ -1352,3 +1352,4 @@ INSERT INTO RutasRoles (Ruta, Rol) VALUES
 ('/RepresentacionVisual', 'invitado'),
 ('/fuente', 'invitado');
 
+select * from resultadoindicador
