@@ -978,27 +978,27 @@ BEGIN
 END;
 GO
 
-
+--agregar indicador
 CREATE PROCEDURE insertar_indicador_tablas
-@codigoIndicador VARCHAR(50),
-@nombreIndicador VARCHAR(100),
-@objetivoIndicador VARCHAR(4000),
-@alcanceIndicador VARCHAR(1000),
-@formulaIndicador VARCHAR(1000),
-@fkidtipoindicador INT,
-@fkidunidadmedicion INT,
-@metaIndicador VARCHAR(1000),
-@fkidsentido INT,
-@fkidfrecuencia INT,
-@fkidarticulo VARCHAR(20),
-@fkidliteral VARCHAR(20),
-@fkidnumeral VARCHAR(20),
-@fkidparagrafo VARCHAR(20),
+	@codigoIndicador VARCHAR(50),
+	@nombreIndicador VARCHAR(100),
+	@objetivoIndicador VARCHAR(4000),
+	@alcanceIndicador VARCHAR(1000),
+	@formulaIndicador VARCHAR(1000),
+	@fkidtipoindicador INT,
+	@fkidunidadmedicion INT,
+	@metaIndicador VARCHAR(1000),
+	@fkidsentido INT,
+	@fkidfrecuencia INT,
+	@fkidarticulo VARCHAR(20),
+	@fkidliteral VARCHAR(20),
+	@fkidnumeral VARCHAR(20),
+	@fkidparagrafo VARCHAR(20),
     @represenvisualporindicador NVARCHAR(MAX),
-@responsablesporindicador NVARCHAR(MAX),
-@fuentesporindicador NVARCHAR(MAX),
-@variablesporindicador NVARCHAR(MAX),
-@resultadoporindicador NVARCHAR(MAX)
+	@responsablesporindicador NVARCHAR(MAX),
+	@fuentesporindicador NVARCHAR(MAX),
+	@variablesporindicador NVARCHAR(MAX),
+	@resultadoporindicador float
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -1006,50 +1006,81 @@ BEGIN
         BEGIN TRANSACTION;
         -- Insertar el indicador
         INSERT INTO indicador(codigo, nombre, objetivo, alcance, formula, fkidtipoindicador, fkidunidadmedicion,
-meta, fkidsentido, fkidfrecuencia, fkidarticulo, fkidliteral, fkidnumeral, fkidparagrafo)
-VALUES (@codigoIndicador, @nombreIndicador, @objetivoIndicador, @alcanceIndicador,
-@formulaIndicador, @fkidtipoindicador, @fkidunidadmedicion, @metaIndicador, @fkidsentido,
-@fkidfrecuencia, @fkidarticulo, @fkidliteral, @fkidnumeral, @fkidparagrafo);
-DECLARE @fkidindicadores INT = SCOPE_IDENTITY();
-DECLARE @fechacalculo DATETIME = GETDATE();
---- insert para la tabla resultado indicador ---
-INSERT INTO resultadoindicador (resultado, fechacalculo, fkidindicador)
-SELECT resultado, @fechacalculo, @fkidindicadores
-FROM OPENJSON(@resultadoporindicador)
-WITH (
-resultado FLOAT '$.resultado'
-);
+		meta, fkidsentido, fkidfrecuencia, fkidarticulo, fkidliteral, fkidnumeral, fkidparagrafo)
+		VALUES (@codigoIndicador, @nombreIndicador, @objetivoIndicador, @alcanceIndicador,
+		@formulaIndicador, @fkidtipoindicador, @fkidunidadmedicion, @metaIndicador, @fkidsentido,
+		@fkidfrecuencia, @fkidarticulo, @fkidliteral, @fkidnumeral, @fkidparagrafo);
+		DECLARE @fkidindicadores INT = SCOPE_IDENTITY();
+		DECLARE @fechacalculo DATETIME = GETDATE();
+IF	@resultadoporindicador = null or @resultadoporindicador = 0
+BEGIN
+    INSERT INTO resultadoindicador (resultado, fechacalculo, fkidindicador)
+    SELECT @resultadoporindicador, @fechacalculo, @fkidindicadores
+END
+
 --- insert para la tabla represenvisualporindicador ---
-INSERT INTO represenvisualporindicador (fkidindicador, fkidrepresenvisual)
-SELECT @fkidindicadores, fkidrepresenvisual
-FROM OPENJSON(@represenvisualporindicador)
-WITH (
-fkidrepresenvisual INT '$.fkidrepresenvisual'
-);
+IF	@represenvisualporindicador is not null
+	and len(@represenvisualporindicador)>0
+	AND EXISTS (
+    SELECT 1
+    FROM OPENJSON(@represenvisualporindicador)
+)
+BEGIN
+	INSERT INTO represenvisualporindicador (fkidindicador, fkidrepresenvisual)
+		SELECT @fkidindicadores, fkidrepresenvisual
+		FROM OPENJSON(@represenvisualporindicador)
+		WITH (
+			fkidrepresenvisual INT '$.fkidrepresenvisual'
+		);
+end
 --- insert para la tabla responsables por indicador ---
+IF	@responsablesporindicador is not null
+	and len(@responsablesporindicador)>0
+	AND EXISTS (
+    SELECT 1
+    FROM OPENJSON(@responsablesporindicador)
+)
+BEGIN
 INSERT INTO responsablesporindicador (fkidresponsable, fkidindicador)
-SELECT fkidresponsable, @fkidindicadores
-FROM OPENJSON(@responsablesporindicador)
-WITH (
-fkidresponsable VARCHAR(50) '$.fkidresponsable'
-);
+		SELECT fkidresponsable, @fkidindicadores
+		FROM OPENJSON(@responsablesporindicador)
+		WITH (
+			fkidresponsable VARCHAR(50) '$.fkidresponsable'
+		);
+end
 --- insert para la tabla fuentes por indicador ---
-INSERT INTO fuentesporindicador(fkidfuente, fkidindicador)
-SELECT fkidfuente, @fkidindicadores
-FROM OPENJSON(@fuentesporindicador)
-WITH (
-fkidfuente INT '$.fkidfuente'
-);
+IF	@fuentesporindicador is not null
+	and len(@fuentesporindicador)>0
+	AND EXISTS (
+    SELECT 1
+    FROM OPENJSON(@fuentesporindicador)
+)
+BEGIN
+	INSERT INTO fuentesporindicador(fkidfuente, fkidindicador)
+		SELECT fkidfuente, @fkidindicadores
+		FROM OPENJSON(@fuentesporindicador)
+		WITH (
+			fkidfuente INT '$.fkidfuente'
+		);
+end
 --- insert para la tabla variables por indicador ---
-DECLARE @fechadato DATETIME = GETDATE();
-INSERT INTO variablesporindicador(fkidvariable, fkidindicador, dato, fkemailusuario, fechadato)
-SELECT fkidvariable, @fkidindicadores, dato, fkemailusuario, @fechadato
-FROM OPENJSON(@variablesporindicador)
-WITH (
-fkidvariable INT '$.fkidvariable',
-dato FLOAT '$.dato',
-fkemailusuario VARCHAR(100) '$.fkemailusuario'
-);
+IF	@variablesporindicador is not null
+	and len(@variablesporindicador)>0
+	AND EXISTS (
+    SELECT 1
+    FROM OPENJSON(@variablesporindicador)
+)
+BEGIN
+	DECLARE @fechadato DATETIME = GETDATE();
+		INSERT INTO variablesporindicador(fkidvariable, fkidindicador, dato, fkemailusuario, fechadato)
+		SELECT fkidvariable, @fkidindicadores, dato, fkemailusuario, @fechadato
+		FROM OPENJSON(@variablesporindicador)
+		WITH (
+			fkidvariable INT '$.fkidvariable',
+			dato FLOAT '$.dato',
+			fkemailusuario VARCHAR(100) '$.fkemailusuario'
+		);
+end
         COMMIT TRANSACTION;
         SELECT  
             'indicador creado exitosamente' AS Mensaje,
@@ -1058,21 +1089,22 @@ fkemailusuario VARCHAR(100) '$.fkemailusuario'
     BEGIN CATCH
         ROLLBACK TRANSACTION;
         DECLARE @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE();
-       
+        
         -- En caso de error, devolver información sobre el error
-        SELECT
+        SELECT 
             @ErrorMessage AS Mensaje,
             GETDATE() AS FechaError,
             ERROR_NUMBER() AS ErrorNumero,
             ERROR_STATE() AS ErrorEstado,
             ERROR_SEVERITY() AS ErrorSeveridad,
             ERROR_LINE() AS ErrorLinea;
-           
+            
         RAISERROR('Error al insertar indicador: %s', 16, 1, @ErrorMessage);
     END CATCH
 END;
 GO
 
+--editar indicador
 CREATE PROCEDURE actualizar_indicador_tablas
 @fkidindicadores INT,
 @codigoIndicador VARCHAR(50),
@@ -1093,7 +1125,7 @@ CREATE PROCEDURE actualizar_indicador_tablas
 @responsablesporindicador NVARCHAR(MAX),
 @fuentesporindicador NVARCHAR(MAX),
 @variablesporindicador NVARCHAR(MAX),
-@resultadoporindicador NVARCHAR(MAX)
+@resultadoporindicador float
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -1123,43 +1155,75 @@ BEGIN
             DELETE FROM variablesporindicador WHERE fkidindicador = @fkidindicadores;
 DECLARE @fechacalculo DATETIME = GETDATE();
 --- insert para la tabla resultado indicador ---
-INSERT INTO resultadoindicador (resultado, fechacalculo, fkidindicador)
-SELECT resultado, @fechacalculo, @fkidindicadores
-FROM OPENJSON(@resultadoporindicador)
-WITH (
-resultado FLOAT '$.resultado'
-);
+IF	@resultadoporindicador = null or @resultadoporindicador = 0
+BEGIN
+    INSERT INTO resultadoindicador (resultado, fechacalculo, fkidindicador)
+    SELECT @resultadoporindicador, @fechacalculo, @fkidindicadores
+END
+
 --- insert para la tabla represenvisualporindicador ---
-INSERT INTO represenvisualporindicador (fkidindicador, fkidrepresenvisual)
-SELECT @fkidindicadores, fkidrepresenvisual
-FROM OPENJSON(@represenvisualporindicador)
-WITH (
-fkidrepresenvisual INT '$.fkidrepresenvisual'
-);
+IF	@represenvisualporindicador is not null
+	and len(@represenvisualporindicador)>0
+	AND EXISTS (
+    SELECT 1
+    FROM OPENJSON(@represenvisualporindicador)
+)
+BEGIN
+	INSERT INTO represenvisualporindicador (fkidindicador, fkidrepresenvisual)
+	SELECT @fkidindicadores, fkidrepresenvisual
+	FROM OPENJSON(@represenvisualporindicador)
+	WITH (
+	fkidrepresenvisual INT '$.fkidrepresenvisual'
+	);
+end
 --- insert para la tabla responsables por indicador ---
+IF	@responsablesporindicador is not null
+	and len(@responsablesporindicador)>0
+	AND EXISTS (
+    SELECT 1
+    FROM OPENJSON(@responsablesporindicador)
+)
+BEGIN
 INSERT INTO responsablesporindicador (fkidresponsable, fkidindicador)
 SELECT fkidresponsable, @fkidindicadores
 FROM OPENJSON(@responsablesporindicador)
 WITH (
 fkidresponsable VARCHAR(50) '$.fkidresponsable'
 );
+end
 --- insert para la tabla fuentes por indicador ---
-INSERT INTO fuentesporindicador(fkidfuente, fkidindicador)
-SELECT fkidfuente, @fkidindicadores
-FROM OPENJSON(@fuentesporindicador)
-WITH (
-fkidfuente INT '$.fkidfuente'
-);
+IF	@fuentesporindicador is not null
+	and len(@fuentesporindicador)>0
+	AND EXISTS (
+    SELECT 1
+    FROM OPENJSON(@fuentesporindicador)
+)
+BEGIN
+	INSERT INTO fuentesporindicador(fkidfuente, fkidindicador)
+	SELECT fkidfuente, @fkidindicadores
+	FROM OPENJSON(@fuentesporindicador)
+	WITH (
+	fkidfuente INT '$.fkidfuente'
+	);
+end
 --- insert para la tabla variables por indicador ---
-DECLARE @fechadato DATETIME = GETDATE();
-INSERT INTO variablesporindicador(fkidvariable, fkidindicador, dato, fkemailusuario, fechadato)
-SELECT fkidvariable, @fkidindicadores, dato, fkemailusuario, @fechadato
-FROM OPENJSON(@variablesporindicador)
-WITH (
-fkidvariable INT '$.fkidvariable',
-dato FLOAT '$.dato',
-fkemailusuario VARCHAR(100) '$.fkemailusuario'
-);
+IF	@variablesporindicador is not null
+	and len(@variablesporindicador)>0
+	AND EXISTS (
+    SELECT 1
+    FROM OPENJSON(@variablesporindicador)
+)
+BEGIN
+	DECLARE @fechadato DATETIME = GETDATE();
+	INSERT INTO variablesporindicador(fkidvariable, fkidindicador, dato, fkemailusuario, fechadato)
+	SELECT fkidvariable, @fkidindicadores, dato, fkemailusuario, @fechadato
+	FROM OPENJSON(@variablesporindicador)
+	WITH (
+	fkidvariable INT '$.fkidvariable',
+	dato FLOAT '$.dato',
+	fkemailusuario VARCHAR(100) '$.fkemailusuario'
+	);
+end
         COMMIT TRANSACTION;
         SELECT  
             'indicador creado exitosamente' AS Mensaje,
@@ -1225,3 +1289,66 @@ BEGIN
     END CATCH
 END;
 GO
+
+CREATE TABLE RutasRoles (
+    Ruta VARCHAR(50),
+    Rol VARCHAR(20)
+);
+
+-- ADMIN tiene acceso total
+INSERT INTO RutasRoles (Ruta, Rol) VALUES
+('/usuario', 'admin'),
+('/Articulo', 'admin'),
+('/Literal', 'admin'),
+('/Numeral', 'admin'),
+('/Paragrafo', 'admin'),
+('/Variable', 'admin'),
+('/actor', 'admin'),
+('/indicador', 'admin'),
+('/sentido', 'admin'),
+('/rol', 'admin'),
+('/sección', 'admin'),
+('/subsección', 'admin'),
+('/tipoindicador', 'admin'),
+('/unidadmedicion', 'admin'),
+('/RepresentacionVisual', 'admin'),
+('/fuente', 'admin'),
+('/tipoactor', 'admin');
+
+-- Verificador tiene acceso a los datos que debe revisar
+INSERT INTO RutasRoles (Ruta, Rol) VALUES
+('/Articulo', 'Verificador'),
+('/Literal', 'Verificador'),
+('/Numeral', 'Verificador'),
+('/Paragrafo', 'Verificador'),
+('/Variable', 'Verificador'),
+('/indicador', 'Verificador'),
+('/unidadmedicion', 'Verificador'),
+('/fuente', 'Verificador');
+
+-- Validador valida la información clave
+INSERT INTO RutasRoles (Ruta, Rol) VALUES
+('/Articulo', 'Validador'),
+('/Literal', 'Validador'),
+('/Numeral', 'Validador'),
+('/Paragrafo', 'Validador'),
+('/Variable', 'Validador'),
+('/indicador', 'Validador'),
+('/sentido', 'Validador'),
+('/tipoindicador', 'Validador');
+
+-- Administrativo gestiona datos generales
+INSERT INTO RutasRoles (Ruta, Rol) VALUES
+('/rol', 'Administrativo'),
+('/sección', 'Administrativo'),
+('/subsección', 'Administrativo'),
+('/tipoactor', 'Administrativo'),
+('/actor', 'Administrativo');
+
+-- Invitado solo puede visualizar lo más general
+INSERT INTO RutasRoles (Ruta, Rol) VALUES
+('/Articulo', 'invitado'),
+('/indicador', 'invitado'),
+('/RepresentacionVisual', 'invitado'),
+('/fuente', 'invitado');
+
